@@ -39,14 +39,14 @@ run: all
 		-drive file=$(IMAGE),format=raw
 
 # Adding it to systemd-boot 
-bootable: all
+bootable: $(TARGET_EFI)
 	@if [ ! -d /boot/EFI/custom ]; then \
 		sudo mkdir -p /boot/EFI/custom; \
 		echo "Created /boot/EFI/custom"; \
 	else \
 		echo "/boot/EFI/custom already exists"; \
 	fi
-	@sudo cp $(IMAGE) /boot/EFI/custom/main.efi
+	@sudo cp $(TARGET_EFI) /boot/EFI/custom/main.efi
 	@echo "title   My Custom EFI Application" | sudo tee /boot/loader/entries/custom.conf > /dev/null
 	@echo "efi     /EFI/custom/main.efi" | sudo tee -a /boot/loader/entries/custom.conf > /dev/null
 	@echo "Now reboot the device and select 'My Custom EFI Application' from the boot menu."
