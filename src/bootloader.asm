@@ -3,10 +3,9 @@ bits 64
 section .text
 global efi_main
 efi_main:
-    mov rax, [rdx + 64]
-    mov rcx, rax
+    mov rcx, [rdx + 64]
     lea rdx, [rel hello_msg]
-    call [rax + 8]
+    call [rcx + 8]
     ret
 section .data
 hello_msg:
