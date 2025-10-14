@@ -1,84 +1,91 @@
+# Makefile for building and running multiple UEFI asm sources.
 #
-# Makefile for building and running a UEFI application with QEMU
+# Each asm in src/*.asm gets its own build subfolder:
+#   build/<name>/<name>.o
+#   build/<name>/<name>.efi
+#   build/<name>/fat.img
 #
+# Usage:
+#   make                # build all images
+#   make <name>         # build only that image (e.g. make bootloader)
+#   make run            # run default 'main' image
+#   make run bootloader # run image named 'bootloader'
+#   make run NAME=bootloader  # alternative
+#
+# Requirements: nasm, lld-link, qemu-system-x86_64, mtools (mmd/mcopy), mkfs.fat, dd
 
-# --- Configuration ---
-# Verify these paths match your system's OVMF installation
 OVMF_CODE = /usr/share/edk2/x64/OVMF_CODE.4m.fd
 OVMF_VARS_SRC = /usr/share/edk2/x64/OVMF_VARS.4m.fd
 
-# Tools and flags
 ASSEMBLER = nasm
 AFLAGS    = -f win64
 LINKER    = lld-link
 LFLAGS    = -subsystem:efi_application -entry:efi_main
 
-# Project structure
+SRC_DIR   = src
 BUILD_DIR = build
-SRC_FILE  = src/main.asm
 
-# Target files
-TARGET_OBJ = $(BUILD_DIR)/main.o
-TARGET_EFI = $(BUILD_DIR)/main.efi
-IMAGE      = $(BUILD_DIR)/fat.img
-OVMF_VARS  = $(BUILD_DIR)/my_ovmf_vars.fd
+ASM_SRCS  = $(wildcard $(SRC_DIR)/*.asm)
+NAMES     = $(patsubst $(SRC_DIR)/%.asm,%,$(ASM_SRCS))
 
-# --- Targets ---
+OVMF_VARS = $(BUILD_DIR)/my_ovmf_vars.fd
 
-# Phony targets don't represent actual files
-.PHONY: all run clean
+.PHONY: all run clean $(NAMES)
 
-# Default target: build the bootable disk image
-all: $(IMAGE)
+# default: build all images
+all: $(foreach n,$(NAMES),$(BUILD_DIR)/$(n)/fat.img)
 
-# Build and run the project in QEMU
-run: all
+# Allow "make run bootloader" or "make run NAME=bootloader"
+EXTRA_GOALS := $(filter-out run,$(MAKECMDGOALS))
+RUN_NAME   := $(or $(firstword $(EXTRA_GOALS)),$(NAME))
+RUN_NAME   := $(if $(RUN_NAME),$(RUN_NAME),main)
+
+run: $(BUILD_DIR)/$(RUN_NAME)/fat.img
+	@echo "Starting QEMU with image: $(BUILD_DIR)/$(RUN_NAME)/fat.img"
 	@qemu-system-x86_64 \
 		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
 		-drive if=pflash,format=raw,file=$(OVMF_VARS) \
-		-drive file=$(IMAGE),format=raw
+		-drive file=$(BUILD_DIR)/$(RUN_NAME)/fat.img,format=raw
 
-# Adding it to systemd-boot 
-bootable: $(TARGET_EFI)
-	@if [ ! -d /boot/EFI/custom ]; then \
-		sudo mkdir -p /boot/EFI/custom; \
-		echo "Created /boot/EFI/custom"; \
-	else \
-		echo "/boot/EFI/custom already exists"; \
-	fi
-	@sudo cp $(TARGET_EFI) /boot/EFI/custom/main.efi
-	@echo "title   My Custom EFI Application" | sudo tee /boot/loader/entries/custom.conf > /dev/null
-	@echo "efi     /EFI/custom/main.efi" | sudo tee -a /boot/loader/entries/custom.conf > /dev/null
-	@echo "Now reboot the device and select 'My Custom EFI Application' from the boot menu."
+# per-name build rules
+# (1) assemble + (2) link to .efi (generated per target)
+define BUILD_rules
+$(BUILD_DIR)/$(1)/$(1).o: $(SRC_DIR)/$(1).asm
+	@echo "Assembling $$< -> $$@"
+	@mkdir -p $$(dir $$@)
+	@$$(ASSEMBLER) $$(AFLAGS) -o $$@ $$<
 
+$(BUILD_DIR)/$(1)/$(1).efi: $(BUILD_DIR)/$(1)/$(1).o
+	@echo "Linking $$< -> $$@"
+	@$$(LINKER) $$(LFLAGS) -out:$$@ $$<
 
-# Rule to create the bootable disk image
-$(IMAGE): $(TARGET_EFI) $(OVMF_VARS)
-	@echo "Creating 64MB FAT32 disk image..."
-	@dd if=/dev/zero of=$(IMAGE) bs=1M count=64 >/dev/null 2>&1
-	@mkfs.fat -F 32 $(IMAGE) >/dev/null 2>&1
+$(BUILD_DIR)/$(1)/fat.img: $(BUILD_DIR)/$(1)/$(1).efi $(OVMF_VARS)
+	@echo "Creating FAT image for $(1) ..."
+	@mkdir -p $$(dir $$@)
+	@dd if=/dev/zero of=$$@ bs=1M count=64 >/dev/null 2>&1
+	@mkfs.fat -F 32 $$@ >/dev/null 2>&1
 	@echo "Copying EFI application to default boot path..."
-	@mmd -i $(IMAGE) ::/EFI >/dev/null 2>&1
-	@mmd -i $(IMAGE) ::/EFI/BOOT >/dev/null 2>&1
-	@mcopy -o -i $(IMAGE) $(TARGET_EFI) ::/EFI/BOOT/BOOTX64.EFI >/dev/null 2>&1
+	@mmd -i $$@ ::/EFI >/dev/null 2>&1 || true
+	@mmd -i $$@ ::/EFI/BOOT >/dev/null 2>&1 || true
+	@# ensure the built .efi exists before attempting to copy
+	@if [ ! -f $(BUILD_DIR)/$(1)/$(1).efi ]; then \
+		echo "Error: $(BUILD_DIR)/$(1)/$(1).efi not found"; \
+		rm -f $$@; \
+		exit 1; \
+	fi
+	@mcopy -o -i $$@ $(BUILD_DIR)/$(1)/$(1).efi ::/EFI/BOOT/BOOTX64.EFI
+endef
 
-# Rule to link the .efi file
-$(TARGET_EFI): $(TARGET_OBJ)
-	@echo "Linking..."
-	@$(LINKER) $(LFLAGS) -out:$(TARGET_EFI) $(TARGET_OBJ)
+$(foreach n,$(NAMES),$(eval $(call BUILD_rules,$(n))))
 
-# Rule to assemble the .asm source file
-$(TARGET_OBJ): $(SRC_FILE)
-	@echo "Assembling..."
-	@mkdir -p $(BUILD_DIR)
-	@$(ASSEMBLER) $(AFLAGS) -o $(TARGET_OBJ) $(SRC_FILE)
-
-# Rule to create a writable copy of the OVMF variables file
+# writable copy of OVMF vars (single file)
 $(OVMF_VARS):
 	@mkdir -p $(BUILD_DIR)
 	@cp $(OVMF_VARS_SRC) $(OVMF_VARS)
 
-# Rule to clean up all generated files
+# allow building a single image by name: make bootloader
+$(NAMES): %: $(BUILD_DIR)/%/fat.img ;
+
 clean:
 	@echo "Cleaning up build files..."
 	@rm -rf $(BUILD_DIR)
