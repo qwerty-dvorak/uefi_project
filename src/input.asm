@@ -3,7 +3,7 @@ bits 64
 section .text
 global efi_main
 efi_main:
-    sub rsp, 24
+    sub rsp, 8
     mov r12, rdx
 read_loop:
     mov rcx, [r12 + 48]
@@ -20,7 +20,7 @@ read_loop:
     mov rcx, [r12 + 64]
     lea rdx, [rel newline]
     call [rcx + 8]
-    add rsp, 22
+    add rsp, 6
     ret
 
 section .data
