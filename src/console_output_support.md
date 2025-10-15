@@ -38,12 +38,12 @@ The `OutputString` function takes two parameters:
 
 The function returns an `EFI_STATUS` code indicating the success or failure of the operation.
 
-We have already calculated the field offsets in the `EFI_SYSTEM_TABLE` struct in the previous section. The `ConOut` field is located at offset 0x40 (64 in decimal).
+We can calculate the field offsets in the `EFI_SYSTEM_TABLE` struct in the previous section. The `ConOut` field is located at offset 24 + 8 + 4 + 4 + 8 + 8 + 8 = 64 (0x40 in hexadecimal).
 
 So to call the `OutputString` function, we would do the following in assembly:
 
 ```asm
-    call [[rdx + 64] + 8]             ; Call OutputString (offset 8 in the struct)
+call [[rdx + 64] + 8]             ; Call OutputString (offset 8 in the struct)
 ```
 
 RDX here stores the pointer to the `EFI_SYSTEM_TABLE` struct. We first dereference it to get the pointer to the `EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL` struct (at offset 64), and then dereference that to get the `OutputString` function pointer (at offset 8) before calling it.
@@ -55,7 +55,7 @@ RCX will have *This (i.e., the pointer to the `EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL` 
 RDX will have the pointer to the string we want to print. We can load the address of the string into RDX using the `LEA` instruction.
 
 ```asm
-    mov rcx, [rdx + 64]               ; Load ConOut (EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *)
-    lea rdx, [rel hello_msg]           ; Load address of the string to print
-    call [rcx + 8]                     ; Call OutputString
+mov rcx, [rdx + 64]               ; Load ConOut (EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *)
+lea rdx, [rel hello_msg]           ; Load address of the string to print
+call [rcx + 8]                     ; Call OutputString
 ```
