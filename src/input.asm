@@ -13,18 +13,14 @@ read_loop:
     jne read_loop
 
     mov rcx, [r12 + 64]
-    lea rdx, [rel newline]
-    call [rcx + 8]
-    mov rcx, [r12 + 64]
-    mov ax, [rsp + 2]
-    mov [rsp + 8], ax
-    mov word [rsp + 10], 0
-    lea rdx, [rsp + 8]
+    add rsp, 2
+    mov word [rsp + 2], 0
+    mov rdx, rsp
     call [rcx + 8]
     mov rcx, [r12 + 64]
     lea rdx, [rel newline]
     call [rcx + 8]
-    add rsp, 24
+    add rsp, 22
     ret
 
 section .data
