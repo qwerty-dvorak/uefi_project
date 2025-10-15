@@ -1,7 +1,7 @@
 # Console Output in UEFI
 This document explains how to print text to the console in a UEFI application using the UEFI system table and the Simple Text Output Protocol.
 
-EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL is defined as 
+`EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL` is defined as
 
 ```c
 typedef struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL {
@@ -17,6 +17,20 @@ typedef struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL {
  SIMPLE_TEXT_OUTPUT_MODE                  *Mode;
 } EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL;
 ```
+
+Field sizes and alignment:
+  - `Reset` (function pointer): 8 bytes
+  - `OutputString` (function pointer): 8 bytes
+  - `TestString` (function pointer): 8 bytes
+  - `QueryMode` (function pointer): 8 bytes
+  - `SetMode` (function pointer): 8 bytes
+  - `SetAttribute` (function pointer): 8 bytes
+  - `ClearScreen` (function pointer): 8 bytes
+  - `SetCursorPosition` (function pointer): 8 bytes
+  - `EnableCursor` (function pointer): 8 bytes
+  - `Mode` (pointer): 8 bytes
+
+Total size: 80 bytes
 
 ## Simple Text Output Protocol 
 To print a text we need to that the `OutputString` function which is defined as 

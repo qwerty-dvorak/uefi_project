@@ -44,7 +44,7 @@ typedef struct {
 } EFI_SYSTEM_TABLE;
 ```
 
-EFI_TABLE_HEADER is defined as:
+`EFI_TABLE_HEADER` is defined as:
 
 ```c
 typedef struct {
@@ -56,7 +56,7 @@ typedef struct {
 } EFI_TABLE_HEADER;
 ```
 
-EFI_HANDLE is defined as:
+`EFI_HANDLE` is defined as:
 
 ```c
 typedef struct {} *EFI_HANDLE;
