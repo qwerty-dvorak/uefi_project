@@ -59,13 +59,15 @@ The function returns an `EFI_STATUS` code indicating the success or failure of t
 
 We can calculate the field offsets in the `EFI_SYSTEM_TABLE` struct in the previous section. The `ConOut` field is located at offset 24 + 8 + 4 + 4 + 8 + 8 + 8 = 64 (0x40 in hexadecimal).
 
+We can also calculate the field offsets in the `EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL` struct. The `SetCursorPosition` function is located at offset 8 + 8 + 8 + 8 + 8 + 8 + 8 = 56 (0x38 in hexadecimal).
+
 So to call the `SetCursorPosition` function, we would do the following in assembly:
 
 ```asm
-call [[rdx + 64] + 64]             ; Call SetCursorPosition (offset 64 in the struct)
+call [[rdx + 64] + 56]             ; Call SetCursorPosition (offset 56 in the struct)
 ```
 
-RDX here stores the pointer to the `EFI_SYSTEM_TABLE` struct. We first dereference it to get the pointer to the `EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL` struct (at offset 64), and then dereference that to get the `SetCursorPosition` function pointer (at offset 64) before calling it.
+RDX here stores the pointer to the `EFI_SYSTEM_TABLE` struct. We first dereference it to get the pointer to the `EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL` struct (at offset 64), and then dereference that to get the `SetCursorPosition` function pointer (at offset 56) before calling it.
 
 Now we need to define the arguments passed to the function. According to the Microsoft x64 ABI, the first argument is passed in RCX, the second argument is passed in RDX, and the third argument is passed in R8.
 
@@ -76,10 +78,10 @@ RDX will have the column position to set the cursor to.
 R8 will have the row position to set the cursor to.
 
 ```asm
-mov rcx, [rdx + 64]               ; Load ConOut (EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *)
+mov rcx, [rdx + 64]                ; Load ConOut (EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *)
 mov rdx, 10                        ; Set column to 10
 mov r8, 5                          ; Set row to 5
-call [[rcx + 64]]                  ; Call SetCursorPosition
+call [rcx + 56]                    ; Call SetCursorPosition
 ```
 
 ## Getting cursor position
@@ -103,6 +105,6 @@ To access these fields, we first need to get the `Mode` field from the `EFI_SIMP
 ```asm
 mov rcx, [rdx + 64]               ; Load ConOut (EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *)
 mov rbx, [rcx + 72]               ; Load Mode (SIMPLE_TEXT
-mov eax, [rbx + 12]               ; Load CursorColumn
-mov ebx, [rbx + 16]               ; Load CursorRow
+mov rdi, [rbx + 12]               ; Load CursorColumn
+mov rsi, [rbx + 16]               ; Load CursorRow
 ```
