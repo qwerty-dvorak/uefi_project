@@ -30,7 +30,7 @@ NAMES     = $(patsubst $(SRC_DIR)/%.asm,%,$(ASM_SRCS))
 
 OVMF_VARS = $(BUILD_DIR)/my_ovmf_vars.fd
 
-.PHONY: all run clean $(NAMES)
+.PHONY: all run clean systemd-boot $(NAMES)
 
 # default: build all images
 all: $(foreach n,$(NAMES),$(BUILD_DIR)/$(n)/fat.img)
@@ -86,6 +86,57 @@ $(OVMF_VARS):
 # allow building a single image by name: make bootloader
 $(NAMES): %: $(BUILD_DIR)/%/fat.img ;
 
+systemd-boot: $(foreach n,$(NAMES),$(BUILD_DIR)/$(n)/$(n).efi)
+	@echo "Installing EFIs to /boot/EFI/custom and creating systemd-boot entries..."
+	@sudo mkdir -p /boot/EFI/custom
+	@sudo mkdir -p /boot/loader/entries
+	@for name in $(NAMES); do \
+		src="$(BUILD_DIR)/$$name/$$name.efi"; \
+        if [ ! -f "$$src" ]; then \
+            echo "Skipping $$name: $$src not found"; \
+            continue; \
+        fi; \
+        sudo cp "$$src" "/boot/EFI/custom/$$name.efi"; \
+        printf "title   %s\n" "$$name" | sudo tee "/boot/loader/entries/$$name.conf" > /dev/null; \
+        printf "efi     /EFI/custom/%s.efi\n" "$$name" | sudo tee -a "/boot/loader/entries/$$name.conf" > /dev/null; \
+        echo "Installed $$name -> /boot/EFI/custom/$$name.efi"; \
+    done
+
+grub: $(foreach n,$(NAMES),$(BUILD_DIR)/$(n)/$(n).efi)
+	@echo "Installing EFIs to /boot/EFI/custom and creating GRUB entries..."
+	@sudo mkdir -p /boot/EFI/custom
+	@for name in $(NAMES); do \
+        src="$(BUILD_DIR)/$$name/$$name.efi"; \
+        if [ ! -f "$$src" ]; then \
+            echo "Skipping $$name: $$src not found"; \
+            continue; \
+        fi; \
+        sudo cp "$$src" "/boot/EFI/custom/$$name.efi"; \
+        printf "\nmenuentry '%s (UEFI)' {\n  insmod part_gpt\n  insmod fat\n  search --no-floppy --file /EFI/custom/%s.efi --set=root\n  chainloader /EFI/custom/%s.efi\n}\n" "$$name" "$$name" "$$name" | sudo tee -a /etc/grub.d/40_custom > /dev/null; \
+        echo "Installed $$name -> /boot/EFI/custom/$$name.efi"; \
+    done; 
+	@if command -v update-grub >/dev/null 2>&1; then \
+        echo "Updating GRUB config (update-grub)..."; \
+        sudo update-grub; \
+    else \
+        echo "Updating GRUB config (grub-mkconfig)..."; \
+        sudo grub-mkconfig -o /boot/grub/grub.cfg; \
+    fi
+
+
 clean:
 	@echo "Cleaning up build files..."
 	@rm -rf $(BUILD_DIR)
+	for name in $(NAMES); do \
+        efi="/boot/EFI/custom/$$name.efi"; \
+        entry="/boot/loader/entries/$$name.conf"; \
+        if [ -f "$$efi" ]; then \
+            echo "Removing $$efi"; \
+            sudo rm -f "$$efi"; \
+        fi; \
+        if [ -f "$$entry" ]; then \
+            echo "Removing $$entry"; \
+            sudo rm -f "$$entry"; \
+        fi; \
+    done
+	@sudo rmdir /boot/EFI/custom >/dev/null 2>&1 || true
